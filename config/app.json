@@ -1,0 +1,20 @@
+{
+  "stream": {
+    "fps": 15,
+    "width": 640,
+    "height": 480,
+    "format": "base64"
+  },
+  "detection": {
+    "confidence_threshold": 0.6,
+    "frame_skip": 2
+  },
+  "alerts": {
+    "unrecognized_face_timeout_seconds": 5
+  },
+  "paths": {
+    "known_faces": "data/known_faces.json",
+    "attendance_log": "data/attendance/",
+    "frame_log": "data/frames/metadata.json"
+  }
+}
