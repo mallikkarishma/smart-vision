@@ -19,6 +19,9 @@ app.add_middleware(
 
 Path("data/frames").mkdir(parents=True, exist_ok=True)
 
+# Setup Haar Cascade face detector
+face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
 class FrameData(BaseModel):
     frame: str
 
@@ -32,12 +35,20 @@ def receive_frame(data: FrameData):
     img_array = np.frombuffer(img_bytes, dtype=np.uint8)
     frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    detections = face_detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+
+    faces = []
+    for (x, y, w, h) in detections:
+        faces.append({"x": int(x), "y": int(y), "width": int(w), "height": int(h)})
+
     metadata = {
         "timestamp": time.time(),
-        "shape": frame.shape if frame is not None else None,
+        "shape": frame.shape,
+        "faces": faces
     }
 
     with open("data/frames/metadata.json", "a") as f:
         f.write(json.dumps(metadata) + "\n")
 
-    return {"status": "ok", "shape": metadata["shape"]}
+    return {"status": "ok", "faces": faces}

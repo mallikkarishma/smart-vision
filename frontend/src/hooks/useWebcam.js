@@ -4,6 +4,7 @@ import axios from "axios";
 const useWebcam = () => {
   const videoRef = useRef(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [faces, setFaces] = useState([]);
   const intervalRef = useRef(null);
 
   const startWebcam = async () => {
@@ -20,9 +21,10 @@ const useWebcam = () => {
     const stream = videoRef.current?.srcObject;
     stream?.getTracks().forEach((track) => track.stop());
     setIsStreaming(false);
+    setFaces([]);
   };
 
-  const captureAndSendFrame = () => {
+  const captureAndSendFrame = async () => {
     const canvas = document.createElement("canvas");
     canvas.width = 640;
     canvas.height = 480;
@@ -30,8 +32,12 @@ const useWebcam = () => {
     ctx.drawImage(videoRef.current, 0, 0, 640, 480);
     const base64Frame = canvas.toDataURL("image/jpeg").split(",")[1];
 
-    axios.post("http://localhost:8000/frame", { frame: base64Frame })
-      .catch((err) => console.error("Frame send error:", err));
+    try {
+      const response = await axios.post("http://localhost:8000/frame", { frame: base64Frame });
+      setFaces(response.data.faces);
+    } catch (err) {
+      console.error("Frame send error:", err);
+    }
   };
 
   useEffect(() => {
@@ -43,7 +49,7 @@ const useWebcam = () => {
     return () => clearInterval(intervalRef.current);
   }, [isStreaming]);
 
-  return { videoRef, isStreaming, startWebcam, stopWebcam };
+  return { videoRef, isStreaming, faces, startWebcam, stopWebcam };
 };
 
 export default useWebcam;
