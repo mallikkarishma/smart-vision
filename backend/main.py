@@ -17,18 +17,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load config
-CONFIG = json.loads(Path("../config/app.json").read_text())
-
-# Ensure log directory exists
 Path("data/frames").mkdir(parents=True, exist_ok=True)
 
 class FrameData(BaseModel):
     frame: str
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+@app.get("/status")
+def status():
+    return {"status": "ok", "project": "Smart Vision", "version": "1.0"}
 
 @app.post("/frame")
 def receive_frame(data: FrameData):
