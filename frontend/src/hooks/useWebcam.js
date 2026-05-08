@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import axios from "axios";
 
 const useWebcam = () => {
   const videoRef = useRef(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [faces, setFaces] = useState([]);
-  const intervalRef = useRef(null);
+  const isRunning = useRef(false);
 
   const startWebcam = async () => {
     try {
@@ -18,19 +18,22 @@ const useWebcam = () => {
   };
 
   const stopWebcam = () => {
+    isRunning.current = false;
     const stream = videoRef.current?.srcObject;
     stream?.getTracks().forEach((track) => track.stop());
     setIsStreaming(false);
     setFaces([]);
   };
 
-  const captureAndSendFrame = async () => {
+  const captureAndSendFrame = useCallback(async () => {
+    if (!videoRef.current || !isRunning.current) return;
+
     const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 480;
+    canvas.width = 320;
+    canvas.height = 240;
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(videoRef.current, 0, 0, 640, 480);
-    const base64Frame = canvas.toDataURL("image/jpeg").split(",")[1];
+    ctx.drawImage(videoRef.current, 0, 0, 320, 240);
+    const base64Frame = canvas.toDataURL("image/jpeg", 0.7).split(",")[1];
 
     try {
       const response = await axios.post("http://localhost:8000/frame", { frame: base64Frame });
@@ -38,16 +41,20 @@ const useWebcam = () => {
     } catch (err) {
       console.error("Frame send error:", err);
     }
-  };
+
+    if (isRunning.current) {
+      setTimeout(captureAndSendFrame, 50);
+    }
+  }, []);
 
   useEffect(() => {
     if (isStreaming) {
-      intervalRef.current = setInterval(captureAndSendFrame, 1000 / 15);
+      isRunning.current = true;
+      captureAndSendFrame();
     } else {
-      clearInterval(intervalRef.current);
+      isRunning.current = false;
     }
-    return () => clearInterval(intervalRef.current);
-  }, [isStreaming]);
+  }, [isStreaming, captureAndSendFrame]);
 
   return { videoRef, isStreaming, faces, startWebcam, stopWebcam };
 };

@@ -10,13 +10,19 @@ const WebcamStream = () => {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    const scaleX = 640 / 320;
+    const scaleY = 480 / 240;
+
     faces.forEach((face) => {
-      ctx.strokeStyle = "#00FF00";
+      const isKnown = face.name && face.name !== "Unknown" && face.name !== "Detecting...";
+
+      ctx.strokeStyle = isKnown ? "#00FF00" : "#FF0000";
       ctx.lineWidth = 2;
-      ctx.strokeRect(face.x, face.y, face.width, face.height);
-      ctx.fillStyle = "#00FF00";
-      ctx.font = "14px Arial";
-      ctx.fillText("Face", face.x, face.y - 5);
+      ctx.strokeRect(face.x * scaleX, face.y * scaleY, face.width * scaleX, face.height * scaleY);
+
+      ctx.fillStyle = isKnown ? "#00FF00" : "#FF0000";
+      ctx.font = "bold 16px Arial";
+      ctx.fillText(face.name || "Unknown", face.x * scaleX, face.y * scaleY - 8);
     });
   }, [faces]);
 
