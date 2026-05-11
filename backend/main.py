@@ -8,6 +8,7 @@ import json
 import time
 import face_recognition
 from pathlib import Path
+from datetime import datetime
 
 app = FastAPI(title="Smart Vision API")
 
@@ -37,9 +38,10 @@ face_detector = cv2.CascadeClassifier(
 )
 
 frame_count = 0
-# Dict keyed by face index to carry names across frames
 face_name_cache = {}
 metadata_buffer = []
+attendance = {}
+attendance_date = datetime.now().strftime("%Y-%m-%d")
 
 RECOGNITION_INTERVAL = 5
 RESIZE_WIDTH = 320
@@ -53,10 +55,32 @@ def identify_face(encoding):
         return "Unknown"
     distances = face_recognition.face_distance(known_encodings, encoding)
     best_match = int(np.argmin(distances))
-    return known_names[best_match] if distances[best_match] < 0.5 else "Unknown"
+    return known_names[best_match] if distances[best_match] < 0.6 else "Unknown"
+
+def log_attendance(name):
+    global attendance, attendance_date
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    if today != attendance_date:
+        attendance = {}
+        attendance_date = today
+
+    now = datetime.now().strftime("%H:%M:%S")
+
+    if name not in attendance:
+        attendance[name] = {
+            "first_seen": now,
+            "last_seen": now
+        }
+    else:
+        attendance[name]["last_seen"] = now
+
+    path = f"data/attendance_{today}.json"
+    with open(path, "w") as f:
+        json.dump(attendance, f, indent=2)
 
 def match_faces_to_cache(current_boxes, cache):
-    """Match current Haar boxes to previously named faces by proximity."""
     matched = {}
     for i, box in enumerate(current_boxes):
         best_idx = None
@@ -70,23 +94,27 @@ def match_faces_to_cache(current_boxes, cache):
             if dist < best_dist:
                 best_dist = dist
                 best_idx = j
-        # If close enough, carry the cached name
-        if best_idx is not None and best_dist < 80:
-            matched[i] = cache[best_idx]["name"]
-        else:
-            matched[i] = "Detecting..."
+        matched[i] = cache[best_idx]["name"] if best_idx is not None and best_dist < 80 else "Detecting..."
     return matched
 
 @app.get("/status")
 def status():
     return {"status": "ok", "project": "Smart Vision", "version": "1.0"}
 
+@app.get("/attendance")
+def get_attendance():
+    today = datetime.now().strftime("%Y-%m-%d")
+    path = f"data/attendance_{today}.json"
+    if Path(path).exists():
+        with open(path) as f:
+            return json.load(f)
+    return {}
+
 @app.post("/frame")
 def receive_frame(data: FrameData):
     global frame_count, face_name_cache, metadata_buffer
     frame_count += 1
 
-    # Decode
     img_bytes = base64.b64decode(data.frame)
     img_array = np.frombuffer(img_bytes, dtype=np.uint8)
     frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -96,7 +124,6 @@ def receive_frame(data: FrameData):
     small_h = int(orig_h * scale)
     small_frame = cv2.resize(frame, (RESIZE_WIDTH, small_h))
 
-    # Haar Cascade on small frame
     gray_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
     detections = face_detector.detectMultiScale(
         gray_small,
@@ -105,7 +132,6 @@ def receive_frame(data: FrameData):
         minSize=(20, 20)
     )
 
-    # Build haar_faces list with scaled-up coordinates
     haar_faces = []
     for (x, y, w, h) in detections:
         haar_faces.append({
@@ -114,16 +140,13 @@ def receive_frame(data: FrameData):
             "name": "Detecting..."
         })
 
-    # Carry names from cache for smooth display between recognition frames
     name_map = match_faces_to_cache(haar_faces, face_name_cache)
     for i, face in enumerate(haar_faces):
         face["name"] = name_map.get(i, "Detecting...")
 
-    # Every N frames — run recognition on ALL detected faces
     if frame_count % RECOGNITION_INTERVAL == 0 and len(haar_faces) > 0:
         rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
-        # Convert all Haar boxes to face_recognition format
         face_locations = [
             (
                 int(f["y"] * scale),
@@ -136,14 +159,16 @@ def receive_frame(data: FrameData):
 
         face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
 
-        # Update cache with fresh names for all faces
         face_name_cache = {}
         for i, encoding in enumerate(face_encodings):
             name = identify_face(encoding)
             haar_faces[i]["name"] = name
             face_name_cache[i] = {**haar_faces[i], "name": name}
 
-    # Buffer metadata
+            # Log attendance for known faces
+            if name != "Unknown" and name != "Detecting...":
+                log_attendance(name)
+
     metadata_buffer.append({
         "timestamp": time.time(),
         "frame": frame_count,
