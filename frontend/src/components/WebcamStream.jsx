@@ -29,114 +29,95 @@ const WebcamStream = () => {
       const w = face.width * scaleX;
       const h = face.height * scaleY;
 
-      // Glow
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 14;
       ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(x, y, w, h, 10);
+      ctx.roundRect(x, y, w, h, 6);
       ctx.stroke();
-      ctx.shadowBlur = 0;
 
-      // Corner brackets
-      const cs = 14;
-      ctx.lineWidth = 3;
-      [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(([cx, cy], i) => {
-        ctx.beginPath();
-        ctx.moveTo(cx + (i % 2 === 0 ? cs : -cs), cy);
-        ctx.lineTo(cx, cy);
-        ctx.lineTo(cx, cy + (i < 2 ? cs : -cs));
-        ctx.stroke();
-      });
-
-      // Badge
       const label = face.name || "Unknown";
-      ctx.font = "600 12px 'Segoe UI', sans-serif";
-      const textW = ctx.measureText(label).width + 18;
-      ctx.fillStyle = color + "25";
+      ctx.font = "500 11px 'Inter', sans-serif";
+      const textW = ctx.measureText(label).width + 14;
+      ctx.fillStyle = color + "18";
       ctx.beginPath();
-      ctx.roundRect(x, y - 26, textW, 20, 5);
+      ctx.roundRect(x, y - 22, textW, 18, 4);
       ctx.fill();
-      ctx.strokeStyle = color + "80";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(x, y - 26, textW, 20, 5);
-      ctx.stroke();
       ctx.fillStyle = color;
-      ctx.fillText(label, x + 9, y - 12);
+      ctx.fillText(label, x + 7, y - 9);
     });
   }, [faces]);
 
   return (
     <div style={{
       minHeight: "100vh",
-      background: "#0a1a16",
-      color: "#e2f5f0",
-      fontFamily: "'Segoe UI', sans-serif",
+      background: "#f7f8fa",
+      fontFamily: "'Inter', 'Segoe UI', sans-serif",
+      color: "#1a1a2e",
     }}>
       {/* Navbar */}
       <div style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "14px 32px",
-        background: "#0d1f1a",
-        borderBottom: "0.5px solid rgba(45,212,191,0.1)",
+        padding: "0 32px",
+        height: 56,
+        background: "#fff",
+        borderBottom: "1px solid #eef0f3",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: "linear-gradient(135deg, #2dd4bf, #34d399)",
+            width: 28, height: 28, borderRadius: 8,
+            background: "#0f172a",
             display: "flex", alignItems: "center",
-            justifyContent: "center", fontSize: 16,
+            justifyContent: "center", fontSize: 13,
           }}>
             👁️
           </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>Smart Vision</div>
-            <div style={{ fontSize: 11, color: "#2a5a50" }}>Face Recognition Dashboard</div>
-          </div>
+          <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: 0.2 }}>Smart Vision</span>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <div style={{
-            padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
-            background: isStreaming ? "rgba(45,212,191,0.12)" : "rgba(255,255,255,0.04)",
-            border: `0.5px solid ${isStreaming ? "rgba(45,212,191,0.3)" : "rgba(255,255,255,0.08)"}`,
-            color: isStreaming ? "#2dd4bf" : "#2a5a50",
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{
+            fontSize: 11, fontWeight: 500,
+            color: isStreaming ? "#0d9488" : "#94a3b8",
+            display: "flex", alignItems: "center", gap: 5,
           }}>
-            {isStreaming ? `● LIVE  ${fps} fps` : "○ Offline"}
-          </div>
-          <div style={{
-            padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
-            background: "rgba(52,211,153,0.08)",
-            border: "0.5px solid rgba(52,211,153,0.2)",
-            color: "#34d399",
-          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: "50%",
+              background: isStreaming ? "#0d9488" : "#cbd5e1",
+              display: "inline-block",
+            }}/>
+            {isStreaming ? `Live · ${fps} fps` : "Offline"}
+          </span>
+          <div style={{ width: 1, height: 16, background: "#eef0f3" }}/>
+          <span style={{ fontSize: 11, color: "#94a3b8" }}>
             {faces.length} face{faces.length !== 1 ? "s" : ""}
-          </div>
+          </span>
         </div>
       </div>
 
       {/* Body */}
       <div style={{
-        display: "flex", gap: "20px",
-        padding: "24px 32px", alignItems: "flex-start",
+        maxWidth: 960,
+        margin: "0 auto",
+        padding: "28px 24px",
+        display: "flex",
+        gap: 20,
+        alignItems: "flex-start",
       }}>
-        {/* Video */}
+        {/* Video card */}
         <div style={{ flex: 1 }}>
           <div style={{
-            borderRadius: 16, overflow: "hidden",
-            border: "0.5px solid rgba(45,212,191,0.12)",
-            background: "#071210",
-            boxShadow: isStreaming ? "0 0 32px rgba(45,212,191,0.08)" : "none",
+            borderRadius: 12,
+            overflow: "hidden",
+            background: "#0f172a",
             position: "relative",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
           }}>
             <video
               ref={videoRef}
               autoPlay
               playsInline
-              style={{ width: "100%", display: "block", background: "#050e0b" }}
+              style={{ width: "100%", display: "block" }}
             />
             <canvas
               ref={canvasRef}
@@ -147,87 +128,83 @@ const WebcamStream = () => {
           </div>
 
           {/* Buttons */}
-          <div style={{ display: "flex", gap: "12px", marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
             <button
               onClick={startWebcam}
               disabled={isStreaming}
               style={{
-                flex: 1, padding: "11px",
-                background: isStreaming
-                  ? "rgba(255,255,255,0.03)"
-                  : "linear-gradient(135deg, #2dd4bf, #34d399)",
-                color: isStreaming ? "#1e4a40" : "#071210",
-                border: "none", borderRadius: 10,
-                fontWeight: 700, fontSize: 13,
+                flex: 1, padding: "9px 0",
+                background: isStreaming ? "#f1f5f9" : "#0f172a",
+                color: isStreaming ? "#cbd5e1" : "#fff",
+                border: "none", borderRadius: 8,
+                fontWeight: 600, fontSize: 13,
                 cursor: isStreaming ? "not-allowed" : "pointer",
-                boxShadow: isStreaming ? "none" : "0 4px 16px rgba(45,212,191,0.25)",
+                fontFamily: "inherit",
               }}
             >
-              Start Stream
+              Start
             </button>
             <button
               onClick={stopWebcam}
               disabled={!isStreaming}
               style={{
-                flex: 1, padding: "11px",
-                background: "rgba(255,255,255,0.04)",
-                color: !isStreaming ? "#1e4a40" : "#e2f5f0",
-                border: `0.5px solid ${!isStreaming ? "transparent" : "rgba(255,255,255,0.1)"}`,
-                borderRadius: 10,
+                flex: 1, padding: "9px 0",
+                background: !isStreaming ? "#f1f5f9" : "#fff",
+                color: !isStreaming ? "#cbd5e1" : "#1a1a2e",
+                border: `1px solid ${!isStreaming ? "transparent" : "#eef0f3"}`,
+                borderRadius: 8,
                 fontWeight: 600, fontSize: 13,
                 cursor: !isStreaming ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
               }}
             >
-              Stop Stream
+              Stop
             </button>
           </div>
         </div>
 
         {/* Side panel */}
         <div style={{
-          width: 220,
-          background: "#071210",
-          borderRadius: 16,
-          border: "0.5px solid rgba(45,212,191,0.08)",
+          width: 200,
+          background: "#fff",
+          borderRadius: 12,
+          border: "1px solid #eef0f3",
           padding: "16px",
-          minHeight: 320,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
         }}>
-          <div style={{
-            fontSize: 10, fontWeight: 700,
-            letterSpacing: 2, color: "#1e4a40",
-            marginBottom: 14, textTransform: "uppercase",
+          <p style={{
+            fontSize: 10, fontWeight: 600,
+            letterSpacing: 1.5, color: "#94a3b8",
+            textTransform: "uppercase", margin: "0 0 12px",
           }}>
             In Frame
-          </div>
+          </p>
 
           {faces.length === 0 ? (
-            <div style={{ textAlign: "center", marginTop: 60, color: "#1e4a40", fontSize: 12 }}>
-              <div style={{ fontSize: 28, marginBottom: 8 }}>🫥</div>
-              No faces detected
+            <div style={{ textAlign: "center", padding: "32px 0", color: "#cbd5e1", fontSize: 12 }}>
+              <div style={{ fontSize: 24, marginBottom: 6 }}>🫥</div>
+              No faces
             </div>
           ) : (
             faces.map((face, i) => {
               const isKnown = face.name && face.name !== "Unknown" && face.name !== "Detecting...";
               const isDetecting = face.name === "Detecting...";
-              const color = isKnown ? "#2dd4bf" : isDetecting ? "#fbbf24" : "#f87171";
+              const color = isKnown ? "#0d9488" : isDetecting ? "#d97706" : "#dc2626";
               return (
                 <div key={i} style={{
-                  padding: "10px 12px", marginBottom: 8,
-                  borderRadius: 10,
-                  background: `${color}0d`,
-                  border: `0.5px solid ${color}30`,
+                  padding: "8px 10px", marginBottom: 6,
+                  borderRadius: 8,
+                  background: "#f8fafc",
+                  border: "1px solid #eef0f3",
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{
-                      width: 7, height: 7, borderRadius: "50%",
-                      background: color, boxShadow: `0 0 5px ${color}`,
+                      width: 6, height: 6, borderRadius: "50%",
+                      background: color, flexShrink: 0,
                     }}/>
-                    <div style={{ fontSize: 13, fontWeight: 600, color }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#1a1a2e" }}>
                       {face.name || "Unknown"}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 10, color: "#1e4a40", marginTop: 4 }}>
-                    {face.width}×{face.height}px
+                    </span>
                   </div>
                 </div>
               );
