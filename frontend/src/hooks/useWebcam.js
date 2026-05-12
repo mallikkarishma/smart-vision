@@ -5,6 +5,7 @@ const useWebcam = () => {
   const videoRef = useRef(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [faces, setFaces] = useState([]);
+  const [objects, setObjects] = useState([]);
   const isRunning = useRef(false);
 
   const startWebcam = async () => {
@@ -23,6 +24,7 @@ const useWebcam = () => {
     stream?.getTracks().forEach((track) => track.stop());
     setIsStreaming(false);
     setFaces([]);
+    setObjects([]);
   };
 
   const captureAndSendFrame = useCallback(async () => {
@@ -38,6 +40,7 @@ const useWebcam = () => {
     try {
       const response = await axios.post("http://localhost:8000/frame", { frame: base64Frame });
       setFaces(response.data.faces);
+      setObjects(response.data.objects || []);
     } catch (err) {
       console.error("Frame send error:", err);
     }
@@ -56,7 +59,7 @@ const useWebcam = () => {
     }
   }, [isStreaming, captureAndSendFrame]);
 
-  return { videoRef, isStreaming, faces, startWebcam, stopWebcam };
+  return { videoRef, isStreaming, faces, objects, startWebcam, stopWebcam };
 };
 
 export default useWebcam;

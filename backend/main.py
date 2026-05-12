@@ -9,6 +9,7 @@ import time
 import face_recognition
 from pathlib import Path
 from datetime import datetime
+from ultralytics import YOLO
 
 app = FastAPI(title="Smart Vision API")
 
@@ -33,6 +34,16 @@ if known_faces_file.exists():
     known_encodings = [np.array(v) for v in known_faces.values()]
     print(f"✅ Loaded {len(known_names)} known face(s): {known_names}")
 
+# Load YOLO model — downloads automatically on first run
+yolo_model = YOLO("yolov8n.pt")
+print("✅ YOLO model loaded!")
+
+# Office objects we care about
+YOLO_TARGETS = {
+    "laptop", "cell phone", "chair", "person",
+    "keyboard", "mouse", "monitor", "book", "cup", "bottle"
+}
+
 face_detector = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
@@ -42,8 +53,10 @@ face_name_cache = {}
 metadata_buffer = []
 attendance = {}
 attendance_date = datetime.now().strftime("%Y-%m-%d")
+last_objects = []
 
 RECOGNITION_INTERVAL = 5
+YOLO_INTERVAL = 3        # run YOLO every 3 frames
 RESIZE_WIDTH = 320
 IO_FLUSH_INTERVAL = 30
 
@@ -61,7 +74,6 @@ def log_attendance(name, face_crop=None):
     global attendance, attendance_date
 
     today = datetime.now().strftime("%Y-%m-%d")
-
     if today != attendance_date:
         attendance = {}
         attendance_date = today
@@ -73,7 +85,6 @@ def log_attendance(name, face_crop=None):
         if face_crop is not None:
             _, buffer = cv2.imencode(".jpg", face_crop, [cv2.IMWRITE_JPEG_QUALITY, 80])
             thumbnail = base64.b64encode(buffer).decode("utf-8")
-
         attendance[name] = {
             "first_seen": now,
             "last_seen": now,
@@ -118,7 +129,7 @@ def get_attendance():
 
 @app.post("/frame")
 def receive_frame(data: FrameData):
-    global frame_count, face_name_cache, metadata_buffer
+    global frame_count, face_name_cache, metadata_buffer, last_objects
     frame_count += 1
 
     img_bytes = base64.b64decode(data.frame)
@@ -130,6 +141,7 @@ def receive_frame(data: FrameData):
     small_h = int(orig_h * scale)
     small_frame = cv2.resize(frame, (RESIZE_WIDTH, small_h))
 
+    # Haar Cascade face detection
     gray_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
     detections = face_detector.detectMultiScale(
         gray_small,
@@ -150,9 +162,9 @@ def receive_frame(data: FrameData):
     for i, face in enumerate(haar_faces):
         face["name"] = name_map.get(i, "Detecting...")
 
+    # Face recognition every N frames
     if frame_count % RECOGNITION_INTERVAL == 0 and len(haar_faces) > 0:
         rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-
         face_locations = [
             (
                 int(f["y"] * scale),
@@ -162,15 +174,12 @@ def receive_frame(data: FrameData):
             )
             for f in haar_faces
         ]
-
         face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
-
         face_name_cache = {}
         for i, encoding in enumerate(face_encodings):
             name = identify_face(encoding)
             haar_faces[i]["name"] = name
             face_name_cache[i] = {**haar_faces[i], "name": name}
-
             if name != "Unknown" and name != "Detecting...":
                 f = haar_faces[i]
                 y1 = max(0, f["y"])
@@ -180,10 +189,31 @@ def receive_frame(data: FrameData):
                 face_crop = frame[y1:y2, x1:x2]
                 log_attendance(name, face_crop)
 
+    # YOLO object detection every 3 frames
+    if frame_count % YOLO_INTERVAL == 0:
+        results = yolo_model(small_frame, verbose=False)
+        last_objects = []
+        for r in results:
+            for box in r.boxes:
+                label = yolo_model.names[int(box.cls)]
+                if label in YOLO_TARGETS:
+                    x1, y1, x2, y2 = box.xyxy[0].tolist()
+                    conf = float(box.conf[0])
+                    last_objects.append({
+                        "label": label,
+                        "confidence": round(conf, 2),
+                        "x": int(x1 / scale),
+                        "y": int(y1 / scale),
+                        "width": int((x2 - x1) / scale),
+                        "height": int((y2 - y1) / scale),
+                    })
+
+    # Buffer metadata
     metadata_buffer.append({
         "timestamp": time.time(),
         "frame": frame_count,
-        "faces": len(haar_faces)
+        "faces": len(haar_faces),
+        "objects": len(last_objects)
     })
     if frame_count % IO_FLUSH_INTERVAL == 0:
         with open("data/frames/metadata.json", "a") as f:
@@ -191,4 +221,8 @@ def receive_frame(data: FrameData):
                 f.write(json.dumps(entry) + "\n")
         metadata_buffer.clear()
 
-    return {"status": "ok", "faces": haar_faces}
+    return {
+        "status": "ok",
+        "faces": haar_faces,
+        "objects": last_objects
+    }
