@@ -19,7 +19,7 @@ const FaceScanIcon = () => (
 );
 
 const WebcamStream = () => {
-  const { videoRef, isStreaming, faces, startWebcam, stopWebcam } = useWebcam();
+  const { videoRef, isStreaming, faces, objects, startWebcam, stopWebcam } = useWebcam();
   const canvasRef = useRef(null);
   const [fps, setFps] = useState(0);
   const frameTimeRef = useRef(Date.now());
@@ -36,6 +36,7 @@ const WebcamStream = () => {
     setFps(Math.round(1000 / (now - frameTimeRef.current)));
     frameTimeRef.current = now;
 
+    // Draw face boxes
     faces.forEach((face) => {
       const isKnown = face.name && face.name !== "Unknown" && face.name !== "Detecting...";
       const isDetecting = face.name === "Detecting...";
@@ -72,7 +73,32 @@ const WebcamStream = () => {
       ctx.fillStyle = "#09060f";
       ctx.fillText(label, x + 7, y - 9);
     });
-  }, [faces]);
+
+    // Draw YOLO object boxes
+    objects.forEach((obj) => {
+      const x = obj.x * scaleX;
+      const y = obj.y * scaleY;
+      const w = obj.width * scaleX;
+      const h = obj.height * scaleY;
+
+      ctx.strokeStyle = "#34d399";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 6);
+      ctx.stroke();
+
+      const label = `${obj.label} ${Math.round(obj.confidence * 100)}%`;
+      ctx.font = "500 11px 'Segoe UI', sans-serif";
+      const textW = ctx.measureText(label).width + 14;
+      ctx.fillStyle = "#34d399";
+      ctx.beginPath();
+      ctx.roundRect(x, y - 22, textW, 18, 4);
+      ctx.fill();
+      ctx.fillStyle = "#09060f";
+      ctx.fillText(label, x + 7, y - 9);
+    });
+
+  }, [faces, objects]);
 
   return (
     <div style={{
@@ -114,6 +140,14 @@ const WebcamStream = () => {
             color: "#7c3aed",
           }}>
             {faces.length} face{faces.length !== 1 ? "s" : ""}
+          </div>
+          <div style={{
+            padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+            background: "rgba(52,211,153,0.08)",
+            border: "0.5px solid rgba(52,211,153,0.15)",
+            color: "#34d399",
+          }}>
+            {objects.length} object{objects.length !== 1 ? "s" : ""}
           </div>
         </div>
       </div>
@@ -203,32 +237,52 @@ const WebcamStream = () => {
             In Frame
           </p>
 
-          {faces.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "32px 0", color: "#2d1f4a", fontSize: 12 }}>
+          {faces.length === 0 && objects.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "24px 0", color: "#2d1f4a", fontSize: 12 }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}>🫥</div>
-              No faces
+              Nothing detected
             </div>
           ) : (
-            faces.map((face, i) => {
-              const isKnown = face.name && face.name !== "Unknown" && face.name !== "Detecting...";
-              const isDetecting = face.name === "Detecting...";
-              const color = isKnown ? "#a78bfa" : isDetecting ? "#fbbf24" : "#f87171";
-              return (
-                <div key={i} style={{
-                  padding: "8px 10px", marginBottom: 6,
+            <>
+              {faces.map((face, i) => {
+                const isKnown = face.name && face.name !== "Unknown" && face.name !== "Detecting...";
+                const isDetecting = face.name === "Detecting...";
+                const color = isKnown ? "#a78bfa" : isDetecting ? "#fbbf24" : "#f87171";
+                return (
+                  <div key={`face-${i}`} style={{
+                    padding: "7px 10px", marginBottom: 6,
+                    borderRadius: 8,
+                    background: `${color}10`,
+                    border: `0.5px solid ${color}30`,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }}/>
+                      <span style={{ fontSize: 11, fontWeight: 600, color }}>
+                        {face.name || "Unknown"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {objects.map((obj, i) => (
+                <div key={`obj-${i}`} style={{
+                  padding: "7px 10px", marginBottom: 6,
                   borderRadius: 8,
-                  background: `${color}10`,
-                  border: `0.5px solid ${color}30`,
+                  background: "rgba(52,211,153,0.06)",
+                  border: "0.5px solid rgba(52,211,153,0.2)",
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }}/>
-                    <span style={{ fontSize: 12, fontWeight: 600, color }}>
-                      {face.name || "Unknown"}
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", flexShrink: 0 }}/>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399" }}>
+                      {obj.label}
+                    </span>
+                    <span style={{ fontSize: 10, color: "#1e4a40", marginLeft: "auto" }}>
+                      {Math.round(obj.confidence * 100)}%
                     </span>
                   </div>
                 </div>
-              );
-            })
+              ))}
+            </>
           )}
         </div>
 
