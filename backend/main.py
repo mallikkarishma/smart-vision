@@ -55,9 +55,9 @@ def identify_face(encoding):
         return "Unknown"
     distances = face_recognition.face_distance(known_encodings, encoding)
     best_match = int(np.argmin(distances))
-    return known_names[best_match] if distances[best_match] < 0.6 else "Unknown"
+    return known_names[best_match] if distances[best_match] < 0.55 else "Unknown"
 
-def log_attendance(name):
+def log_attendance(name, face_crop=None):
     global attendance, attendance_date
 
     today = datetime.now().strftime("%Y-%m-%d")
@@ -69,9 +69,15 @@ def log_attendance(name):
     now = datetime.now().strftime("%H:%M:%S")
 
     if name not in attendance:
+        thumbnail = None
+        if face_crop is not None:
+            _, buffer = cv2.imencode(".jpg", face_crop, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            thumbnail = base64.b64encode(buffer).decode("utf-8")
+
         attendance[name] = {
             "first_seen": now,
-            "last_seen": now
+            "last_seen": now,
+            "thumbnail": thumbnail
         }
     else:
         attendance[name]["last_seen"] = now
@@ -128,7 +134,7 @@ def receive_frame(data: FrameData):
     detections = face_detector.detectMultiScale(
         gray_small,
         scaleFactor=1.1,
-        minNeighbors=3,
+        minNeighbors=5,
         minSize=(20, 20)
     )
 
@@ -165,9 +171,14 @@ def receive_frame(data: FrameData):
             haar_faces[i]["name"] = name
             face_name_cache[i] = {**haar_faces[i], "name": name}
 
-            # Log attendance for known faces
             if name != "Unknown" and name != "Detecting...":
-                log_attendance(name)
+                f = haar_faces[i]
+                y1 = max(0, f["y"])
+                y2 = min(frame.shape[0], f["y"] + f["height"])
+                x1 = max(0, f["x"])
+                x2 = min(frame.shape[1], f["x"] + f["width"])
+                face_crop = frame[y1:y2, x1:x2]
+                log_attendance(name, face_crop)
 
     metadata_buffer.append({
         "timestamp": time.time(),
