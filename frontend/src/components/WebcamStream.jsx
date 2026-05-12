@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import useWebcam from "../hooks/useWebcam";
+import AttendanceSidebar from "./AttendanceSidebar";
 
 const FaceScanIcon = () => (
   <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
@@ -51,7 +52,6 @@ const WebcamStream = () => {
       ctx.roundRect(x, y, w, h, 8);
       ctx.stroke();
 
-      // Corner brackets
       const cs = 12;
       ctx.lineWidth = 2.5;
       [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(([cx, cy], i) => {
@@ -62,7 +62,6 @@ const WebcamStream = () => {
         ctx.stroke();
       });
 
-      // Name badge — solid fill, dark text
       const label = face.name || "Unknown";
       ctx.font = "600 11px 'Segoe UI', sans-serif";
       const textW = ctx.measureText(label).width + 14;
@@ -121,7 +120,7 @@ const WebcamStream = () => {
 
       {/* Body */}
       <div style={{
-        maxWidth: 960,
+        maxWidth: 1100,
         margin: "0 auto",
         padding: "24px",
         display: "flex",
@@ -152,7 +151,6 @@ const WebcamStream = () => {
             />
           </div>
 
-          {/* Buttons */}
           <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
             <button
               onClick={startWebcam}
@@ -189,9 +187,9 @@ const WebcamStream = () => {
           </div>
         </div>
 
-        {/* Side panel */}
+        {/* In Frame panel */}
         <div style={{
-          width: 200,
+          width: 180,
           background: "#0e0a18",
           borderRadius: 14,
           border: "0.5px solid #1e1530",
@@ -233,6 +231,9 @@ const WebcamStream = () => {
             })
           )}
         </div>
+
+        {/* Attendance sidebar */}
+        <AttendanceSidebar />
       </div>
     </div>
   );
