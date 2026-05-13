@@ -320,7 +320,6 @@ const WebcamStream = () => {
                     borderRadius: 8,
                     background: `${color}10`,
                     border: `0.5px solid ${color}30`,
-                    animation: "fadeIn 0.3s ease",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }}/>
@@ -344,7 +343,6 @@ const WebcamStream = () => {
                     borderRadius: 8,
                     background: `${color}0d`,
                     border: `0.5px solid ${color}25`,
-                    animation: "fadeIn 0.3s ease",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }}/>
@@ -384,13 +382,6 @@ const WebcamStream = () => {
         {/* Attendance sidebar */}
         <AttendanceSidebar />
       </div>
-
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </div>
   );
 };
