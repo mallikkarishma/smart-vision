@@ -23,9 +23,21 @@ const WebcamStream = () => {
   const canvasRef = useRef(null);
   const [fps, setFps] = useState(0);
   const [zoneCount, setZoneCount] = useState(0);
+  const [clock, setClock] = useState("");
   const frameTimeRef = useRef(Date.now());
 
   const zone = { x: 150, y: 100, w: 340, h: 280 };
+
+  // Clock
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setClock(now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -149,21 +161,31 @@ const WebcamStream = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0 28px",
-        height: 54,
+        padding: "0 32px",
+        height: 58,
         background: "#0e0a18",
         borderBottom: "0.5px solid #1e1530",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <FaceScanIcon />
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#ede9fe" }}>Smart Vision</div>
-            <div style={{ fontSize: 10, color: "#4c3d6b" }}>Face Recognition Dashboard</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "#ede9fe" }}>Smart Vision</div>
+            <div style={{ fontSize: 11, color: "#4c3d6b" }}>Face Recognition Dashboard</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <div style={{
-            padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+            padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+            background: "rgba(255,255,255,0.04)",
+            border: "0.5px solid #1e1530",
+            color: "#4c3d6b",
+            letterSpacing: 1,
+          }}>
+            {clock}
+          </div>
+          <div style={{ width: 1, height: 16, background: "#1e1530" }}/>
+          <div style={{
+            padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
             background: isStreaming ? "rgba(124,58,237,0.15)" : "rgba(255,255,255,0.04)",
             border: `0.5px solid ${isStreaming ? "rgba(124,58,237,0.4)" : "#1e1530"}`,
             color: isStreaming ? "#a78bfa" : "#4c3d6b",
@@ -171,7 +193,7 @@ const WebcamStream = () => {
             {isStreaming ? `● LIVE · ${fps} fps` : "○ Offline"}
           </div>
           <div style={{
-            padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+            padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
             background: "rgba(167,139,250,0.08)",
             border: "0.5px solid rgba(167,139,250,0.15)",
             color: "#7c3aed",
@@ -179,7 +201,7 @@ const WebcamStream = () => {
             {faces.length} face{faces.length !== 1 ? "s" : ""}
           </div>
           <div style={{
-            padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+            padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
             background: "rgba(52,211,153,0.08)",
             border: "0.5px solid rgba(52,211,153,0.15)",
             color: "#34d399",
@@ -187,7 +209,7 @@ const WebcamStream = () => {
             {objects.length} object{objects.length !== 1 ? "s" : ""}
           </div>
           <div style={{
-            padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+            padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
             background: "rgba(251,191,36,0.08)",
             border: "0.5px solid rgba(251,191,36,0.2)",
             color: "#fbbf24",
@@ -199,11 +221,10 @@ const WebcamStream = () => {
 
       {/* Body */}
       <div style={{
-        maxWidth: 1100,
-        margin: "0 auto",
-        padding: "24px",
+        maxWidth: "100%",
+        padding: "24px 48px",
         display: "flex",
-        gap: 16,
+        gap: 20,
         alignItems: "flex-start",
       }}>
         {/* Video */}
@@ -235,11 +256,11 @@ const WebcamStream = () => {
               onClick={startWebcam}
               disabled={isStreaming}
               style={{
-                flex: 1, padding: "10px",
+                flex: 1, padding: "11px",
                 background: isStreaming ? "rgba(255,255,255,0.03)" : "#7c3aed",
                 color: isStreaming ? "#2d1f4a" : "#fff",
                 border: "none", borderRadius: 9,
-                fontWeight: 700, fontSize: 13,
+                fontWeight: 700, fontSize: 14,
                 cursor: isStreaming ? "not-allowed" : "pointer",
                 fontFamily: "inherit",
                 boxShadow: isStreaming ? "none" : "0 4px 14px rgba(124,58,237,0.3)",
@@ -251,12 +272,12 @@ const WebcamStream = () => {
               onClick={stopWebcam}
               disabled={!isStreaming}
               style={{
-                flex: 1, padding: "10px",
+                flex: 1, padding: "11px",
                 background: "rgba(255,255,255,0.03)",
                 color: !isStreaming ? "#2d1f4a" : "#ede9fe",
                 border: `0.5px solid ${!isStreaming ? "transparent" : "#1e1530"}`,
                 borderRadius: 9,
-                fontWeight: 600, fontSize: 13,
+                fontWeight: 600, fontSize: 14,
                 cursor: !isStreaming ? "not-allowed" : "pointer",
                 fontFamily: "inherit",
               }}
@@ -268,14 +289,14 @@ const WebcamStream = () => {
 
         {/* In Frame panel */}
         <div style={{
-          width: 180,
+          width: 200,
           background: "#0e0a18",
           borderRadius: 14,
           border: "0.5px solid #1e1530",
-          padding: "14px",
+          padding: "16px",
         }}>
           <p style={{
-            fontSize: 9, fontWeight: 700,
+            fontSize: 10, fontWeight: 700,
             letterSpacing: 2, color: "#2d1f4a",
             textTransform: "uppercase", margin: "0 0 12px",
           }}>
@@ -295,14 +316,15 @@ const WebcamStream = () => {
                 const color = isKnown ? "#a78bfa" : isDetecting ? "#fbbf24" : "#f87171";
                 return (
                   <div key={`face-${i}`} style={{
-                    padding: "7px 10px", marginBottom: 6,
+                    padding: "8px 10px", marginBottom: 6,
                     borderRadius: 8,
                     background: `${color}10`,
                     border: `0.5px solid ${color}30`,
+                    animation: "fadeIn 0.3s ease",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }}/>
-                      <span style={{ fontSize: 11, fontWeight: 600, color }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color }}>
                         {face.name || "Unknown"} #{face.track_id ?? "?"}
                       </span>
                     </div>
@@ -318,14 +340,15 @@ const WebcamStream = () => {
                 const color = inside ? "#fbbf24" : "#34d399";
                 return (
                   <div key={`obj-${i}`} style={{
-                    padding: "7px 10px", marginBottom: 6,
+                    padding: "8px 10px", marginBottom: 6,
                     borderRadius: 8,
                     background: `${color}0d`,
                     border: `0.5px solid ${color}25`,
+                    animation: "fadeIn 0.3s ease",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }}/>
-                      <span style={{ fontSize: 11, fontWeight: 600, color }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color }}>
                         {obj.label} #{obj.track_id ?? "?"}
                       </span>
                       <span style={{ fontSize: 10, color: "#2d1f4a", marginLeft: "auto" }}>
@@ -343,7 +366,7 @@ const WebcamStream = () => {
 
           {/* Zone count */}
           <div style={{
-            marginTop: 12, padding: "8px 10px",
+            marginTop: 12, padding: "10px",
             borderRadius: 8,
             background: "rgba(251,191,36,0.06)",
             border: "0.5px solid rgba(251,191,36,0.2)",
@@ -352,7 +375,7 @@ const WebcamStream = () => {
             <div style={{ fontSize: 9, color: "#fbbf24", letterSpacing: 1, fontWeight: 700, textTransform: "uppercase" }}>
               Zone Count
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>
               {zoneCount}
             </div>
           </div>
@@ -361,6 +384,13 @@ const WebcamStream = () => {
         {/* Attendance sidebar */}
         <AttendanceSidebar />
       </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 };
