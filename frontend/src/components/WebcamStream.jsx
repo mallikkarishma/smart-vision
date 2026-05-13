@@ -22,7 +22,10 @@ const WebcamStream = () => {
   const { videoRef, isStreaming, faces, objects, startWebcam, stopWebcam } = useWebcam();
   const canvasRef = useRef(null);
   const [fps, setFps] = useState(0);
+  const [zoneCount, setZoneCount] = useState(0);
   const frameTimeRef = useRef(Date.now());
+
+  const zone = { x: 150, y: 100, w: 340, h: 280 };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -35,6 +38,32 @@ const WebcamStream = () => {
     const now = Date.now();
     setFps(Math.round(1000 / (now - frameTimeRef.current)));
     frameTimeRef.current = now;
+
+    // Draw zone
+    ctx.strokeStyle = "rgba(251,191,36,0.8)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+    ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(251,191,36,0.04)";
+    ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+    ctx.fillStyle = "rgba(251,191,36,0.9)";
+    ctx.font = "700 11px 'Segoe UI', sans-serif";
+    ctx.fillText("ZONE", zone.x + 8, zone.y + 16);
+
+    // Count unique objects in zone
+    const inZoneIds = new Set();
+    objects.forEach((obj) => {
+      const cx = obj.x * scaleX + (obj.width * scaleX) / 2;
+      const cy = obj.y * scaleY + (obj.height * scaleY) / 2;
+      const inside =
+        cx > zone.x && cx < zone.x + zone.w &&
+        cy > zone.y && cy < zone.y + zone.h;
+      if (inside && obj.track_id !== undefined) {
+        inZoneIds.add(obj.track_id);
+      }
+    });
+    setZoneCount(inZoneIds.size);
 
     // Draw face boxes
     faces.forEach((face) => {
@@ -63,7 +92,7 @@ const WebcamStream = () => {
         ctx.stroke();
       });
 
-      const label = face.name || "Unknown";
+      const label = `${face.name || "Unknown"} #${face.track_id ?? "?"}`;
       ctx.font = "600 11px 'Segoe UI', sans-serif";
       const textW = ctx.measureText(label).width + 14;
       ctx.fillStyle = color;
@@ -81,16 +110,24 @@ const WebcamStream = () => {
       const w = obj.width * scaleX;
       const h = obj.height * scaleY;
 
-      ctx.strokeStyle = "#34d399";
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      const inside =
+        cx > zone.x && cx < zone.x + zone.w &&
+        cy > zone.y && cy < zone.y + zone.h;
+
+      const color = inside ? "#fbbf24" : "#34d399";
+
+      ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.roundRect(x, y, w, h, 6);
       ctx.stroke();
 
-      const label = `${obj.label} ${Math.round(obj.confidence * 100)}%`;
+      const label = `${obj.label} #${obj.track_id ?? "?"} ${Math.round(obj.confidence * 100)}%`;
       ctx.font = "500 11px 'Segoe UI', sans-serif";
       const textW = ctx.measureText(label).width + 14;
-      ctx.fillStyle = "#34d399";
+      ctx.fillStyle = color;
       ctx.beginPath();
       ctx.roundRect(x, y - 22, textW, 18, 4);
       ctx.fill();
@@ -148,6 +185,14 @@ const WebcamStream = () => {
             color: "#34d399",
           }}>
             {objects.length} object{objects.length !== 1 ? "s" : ""}
+          </div>
+          <div style={{
+            padding: "3px 12px", borderRadius: 20, fontSize: 11, fontWeight: 600,
+            background: "rgba(251,191,36,0.08)",
+            border: "0.5px solid rgba(251,191,36,0.2)",
+            color: "#fbbf24",
+          }}>
+            {zoneCount} in zone
           </div>
         </div>
       </div>
@@ -258,32 +303,59 @@ const WebcamStream = () => {
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }}/>
                       <span style={{ fontSize: 11, fontWeight: 600, color }}>
-                        {face.name || "Unknown"}
+                        {face.name || "Unknown"} #{face.track_id ?? "?"}
                       </span>
                     </div>
                   </div>
                 );
               })}
-              {objects.map((obj, i) => (
-                <div key={`obj-${i}`} style={{
-                  padding: "7px 10px", marginBottom: 6,
-                  borderRadius: 8,
-                  background: "rgba(52,211,153,0.06)",
-                  border: "0.5px solid rgba(52,211,153,0.2)",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", flexShrink: 0 }}/>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399" }}>
-                      {obj.label}
-                    </span>
-                    <span style={{ fontSize: 10, color: "#1e4a40", marginLeft: "auto" }}>
-                      {Math.round(obj.confidence * 100)}%
-                    </span>
+              {objects.map((obj, i) => {
+                const cx = obj.x * 2 + (obj.width * 2) / 2;
+                const cy = obj.y * 2 + (obj.height * 2) / 2;
+                const inside =
+                  cx > zone.x && cx < zone.x + zone.w &&
+                  cy > zone.y && cy < zone.y + zone.h;
+                const color = inside ? "#fbbf24" : "#34d399";
+                return (
+                  <div key={`obj-${i}`} style={{
+                    padding: "7px 10px", marginBottom: 6,
+                    borderRadius: 8,
+                    background: `${color}0d`,
+                    border: `0.5px solid ${color}25`,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }}/>
+                      <span style={{ fontSize: 11, fontWeight: 600, color }}>
+                        {obj.label} #{obj.track_id ?? "?"}
+                      </span>
+                      <span style={{ fontSize: 10, color: "#2d1f4a", marginLeft: "auto" }}>
+                        {Math.round(obj.confidence * 100)}%
+                      </span>
+                    </div>
+                    {inside && (
+                      <div style={{ fontSize: 9, color: "#fbbf24", marginTop: 3 }}>● in zone</div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </>
           )}
+
+          {/* Zone count */}
+          <div style={{
+            marginTop: 12, padding: "8px 10px",
+            borderRadius: 8,
+            background: "rgba(251,191,36,0.06)",
+            border: "0.5px solid rgba(251,191,36,0.2)",
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: 9, color: "#fbbf24", letterSpacing: 1, fontWeight: 700, textTransform: "uppercase" }}>
+              Zone Count
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#fbbf24", marginTop: 2 }}>
+              {zoneCount}
+            </div>
+          </div>
         </div>
 
         {/* Attendance sidebar */}

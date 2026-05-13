@@ -10,6 +10,7 @@ import face_recognition
 from pathlib import Path
 from datetime import datetime
 from ultralytics import YOLO
+from centroid_tracker import CentroidTracker
 
 app = FastAPI(title="Smart Vision API")
 
@@ -34,11 +35,10 @@ if known_faces_file.exists():
     known_encodings = [np.array(v) for v in known_faces.values()]
     print(f"✅ Loaded {len(known_names)} known face(s): {known_names}")
 
-# Load YOLO model — downloads automatically on first run
+# Load YOLO
 yolo_model = YOLO("yolov8n.pt")
 print("✅ YOLO model loaded!")
 
-# Office objects we care about
 YOLO_TARGETS = {
     "laptop", "cell phone", "chair", "person",
     "keyboard", "mouse", "monitor", "book", "cup", "bottle"
@@ -48,6 +48,10 @@ face_detector = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
 
+# Centroid trackers
+face_tracker = CentroidTracker(max_disappeared=20)
+object_tracker = CentroidTracker(max_disappeared=20)
+
 frame_count = 0
 face_name_cache = {}
 metadata_buffer = []
@@ -56,7 +60,7 @@ attendance_date = datetime.now().strftime("%Y-%m-%d")
 last_objects = []
 
 RECOGNITION_INTERVAL = 5
-YOLO_INTERVAL = 3        # run YOLO every 3 frames
+YOLO_INTERVAL = 3
 RESIZE_WIDTH = 320
 IO_FLUSH_INTERVAL = 30
 
@@ -158,9 +162,17 @@ def receive_frame(data: FrameData):
             "name": "Detecting..."
         })
 
+    # Carry names from cache
     name_map = match_faces_to_cache(haar_faces, face_name_cache)
     for i, face in enumerate(haar_faces):
         face["name"] = name_map.get(i, "Detecting...")
+
+    # Update face tracker — assign track IDs
+    face_rects = [(f["x"], f["y"], f["width"], f["height"]) for f in haar_faces]
+    tracked_faces = face_tracker.update(face_rects)
+    tracked_ids = list(tracked_faces.keys())
+    for i, face in enumerate(haar_faces):
+        face["track_id"] = int(tracked_ids[i]) if i < len(tracked_ids) else -1
 
     # Face recognition every N frames
     if frame_count % RECOGNITION_INTERVAL == 0 and len(haar_faces) > 0:
@@ -207,6 +219,13 @@ def receive_frame(data: FrameData):
                         "width": int((x2 - x1) / scale),
                         "height": int((y2 - y1) / scale),
                     })
+
+    # Update object tracker — assign track IDs
+    object_rects = [(o["x"], o["y"], o["width"], o["height"]) for o in last_objects]
+    tracked_objects = object_tracker.update(object_rects)
+    tracked_obj_ids = list(tracked_objects.keys())
+    for i, obj in enumerate(last_objects):
+        obj["track_id"] = int(tracked_obj_ids[i]) if i < len(tracked_obj_ids) else -1
 
     # Buffer metadata
     metadata_buffer.append({
