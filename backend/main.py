@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from ultralytics import YOLO
 from centroid_tracker import CentroidTracker
+from scene_narrator import narrate_scene
 
 app = FastAPI(title="Smart Vision API")
 
@@ -58,9 +59,11 @@ metadata_buffer = []
 attendance = {}
 attendance_date = datetime.now().strftime("%Y-%m-%d")
 last_objects = []
+last_narration = "Waiting for scene..."
 
 RECOGNITION_INTERVAL = 5
 YOLO_INTERVAL = 3
+NARRATION_INTERVAL = 30
 RESIZE_WIDTH = 320
 IO_FLUSH_INTERVAL = 30
 
@@ -131,9 +134,13 @@ def get_attendance():
             return json.load(f)
     return {}
 
+@app.get("/narration")
+def get_narration():
+    return {"narration": last_narration}
+
 @app.post("/frame")
 def receive_frame(data: FrameData):
-    global frame_count, face_name_cache, metadata_buffer, last_objects
+    global frame_count, face_name_cache, metadata_buffer, last_objects, last_narration
     frame_count += 1
 
     img_bytes = base64.b64decode(data.frame)
@@ -167,7 +174,7 @@ def receive_frame(data: FrameData):
     for i, face in enumerate(haar_faces):
         face["name"] = name_map.get(i, "Detecting...")
 
-    # Update face tracker — assign track IDs
+    # Update face tracker
     face_rects = [(f["x"], f["y"], f["width"], f["height"]) for f in haar_faces]
     tracked_faces = face_tracker.update(face_rects)
     tracked_ids = list(tracked_faces.keys())
@@ -220,12 +227,20 @@ def receive_frame(data: FrameData):
                         "height": int((y2 - y1) / scale),
                     })
 
-    # Update object tracker — assign track IDs
+    # Update object tracker
     object_rects = [(o["x"], o["y"], o["width"], o["height"]) for o in last_objects]
     tracked_objects = object_tracker.update(object_rects)
     tracked_obj_ids = list(tracked_objects.keys())
     for i, obj in enumerate(last_objects):
         obj["track_id"] = int(tracked_obj_ids[i]) if i < len(tracked_obj_ids) else -1
+
+    # Scene narration every 30 frames
+    if frame_count % NARRATION_INTERVAL == 0:
+        try:
+            last_narration = narrate_scene(last_objects, haar_faces)
+            print(f"🎙️ {last_narration}")
+        except Exception as e:
+            print(f"Narration error: {e}")
 
     # Buffer metadata
     metadata_buffer.append({
@@ -243,5 +258,6 @@ def receive_frame(data: FrameData):
     return {
         "status": "ok",
         "faces": haar_faces,
-        "objects": last_objects
+        "objects": last_objects,
+        "narration": last_narration
     }

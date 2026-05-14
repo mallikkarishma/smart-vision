@@ -19,7 +19,7 @@ const FaceScanIcon = () => (
 );
 
 const WebcamStream = () => {
-  const { videoRef, isStreaming, faces, objects, startWebcam, stopWebcam } = useWebcam();
+  const { videoRef, isStreaming, faces, objects, narration, startWebcam, stopWebcam } = useWebcam();
   const canvasRef = useRef(null);
   const [fps, setFps] = useState(0);
   const [zoneCount, setZoneCount] = useState(0);
@@ -218,6 +218,23 @@ const WebcamStream = () => {
           </div>
         </div>
       </div>
+
+      {/* Narration bar */}
+      {isStreaming && (
+        <div style={{
+          padding: "8px 32px",
+          background: "rgba(124,58,237,0.08)",
+          borderBottom: "0.5px solid #1e1530",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}>
+          <span style={{ fontSize: 14 }}>🎙️</span>
+          <span style={{ fontSize: 12, color: "#a78bfa", fontStyle: "italic" }}>
+            {narration}
+          </span>
+        </div>
+      )}
 
       {/* Body */}
       <div style={{
