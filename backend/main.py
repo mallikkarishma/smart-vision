@@ -60,12 +60,15 @@ attendance = {}
 attendance_date = datetime.now().strftime("%Y-%m-%d")
 last_objects = []
 last_narration = "Waiting for scene..."
+unknown_face_timer = {}
+active_alerts = []
 
 RECOGNITION_INTERVAL = 5
 YOLO_INTERVAL = 3
 NARRATION_INTERVAL = 30
 RESIZE_WIDTH = 320
 IO_FLUSH_INTERVAL = 30
+ALERT_THRESHOLD = 5
 
 class FrameData(BaseModel):
     frame: str
@@ -121,6 +124,40 @@ def match_faces_to_cache(current_boxes, cache):
         matched[i] = cache[best_idx]["name"] if best_idx is not None and best_dist < 80 else "Detecting..."
     return matched
 
+def check_unknown_alerts(faces):
+    global unknown_face_timer, active_alerts
+    current_time = time.time()
+    current_ids = set()
+
+    for face in faces:
+        track_id = face.get("track_id", -1)
+        name = face.get("name", "Unknown")
+
+        if name == "Unknown" and track_id != -1:
+            current_ids.add(track_id)
+            if track_id not in unknown_face_timer:
+                unknown_face_timer[track_id] = current_time
+            else:
+                duration = current_time - unknown_face_timer[track_id]
+                if duration >= ALERT_THRESHOLD:
+                    existing_ids = [a["track_id"] for a in active_alerts]
+                    if track_id not in existing_ids:
+                        alert = {
+                            "type": "unknown_face",
+                            "track_id": track_id,
+                            "duration": round(duration, 1),
+                            "timestamp": datetime.now().strftime("%H:%M:%S"),
+                            "message": f"Unknown face #{track_id} in frame for {round(duration)}s"
+                        }
+                        active_alerts.append(alert)
+                        print(f"🚨 ALERT: {alert['message']}")
+
+    for tid in list(unknown_face_timer.keys()):
+        if tid not in current_ids:
+            del unknown_face_timer[tid]
+
+    active_alerts = active_alerts[-10:]
+
 @app.get("/status")
 def status():
     return {"status": "ok", "project": "Smart Vision", "version": "1.0"}
@@ -137,6 +174,16 @@ def get_attendance():
 @app.get("/narration")
 def get_narration():
     return {"narration": last_narration}
+
+@app.get("/alerts")
+def get_alerts():
+    return {"alerts": active_alerts}
+
+@app.delete("/alerts")
+def clear_alerts():
+    global active_alerts
+    active_alerts = []
+    return {"status": "cleared"}
 
 @app.post("/frame")
 def receive_frame(data: FrameData):
@@ -208,6 +255,9 @@ def receive_frame(data: FrameData):
                 face_crop = frame[y1:y2, x1:x2]
                 log_attendance(name, face_crop)
 
+    # Check for unknown face alerts
+    check_unknown_alerts(haar_faces)
+
     # YOLO object detection every 3 frames
     if frame_count % YOLO_INTERVAL == 0:
         results = yolo_model(small_frame, verbose=False)
@@ -259,5 +309,6 @@ def receive_frame(data: FrameData):
         "status": "ok",
         "faces": haar_faces,
         "objects": last_objects,
-        "narration": last_narration
+        "narration": last_narration,
+        "alerts": active_alerts
     }

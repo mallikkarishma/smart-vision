@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import axios from "axios";
 import useWebcam from "../hooks/useWebcam";
 import AttendanceSidebar from "./AttendanceSidebar";
 
@@ -24,7 +25,9 @@ const WebcamStream = () => {
   const [fps, setFps] = useState(0);
   const [zoneCount, setZoneCount] = useState(0);
   const [clock, setClock] = useState("");
+  const [alerts, setAlerts] = useState([]);
   const frameTimeRef = useRef(Date.now());
+  const prevAlertCount = useRef(0);
 
   const zone = { x: 150, y: 100, w: 340, h: 280 };
 
@@ -38,6 +41,46 @@ const WebcamStream = () => {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const playBeep = () => {
+    const ctx = new AudioContext();
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + 0.5);
+  };
+
+  // Alerts polling
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await axios.get("http://localhost:8000/alerts");
+        const newAlerts = res.data.alerts || [];
+        if (newAlerts.length > prevAlertCount.current) {
+          playBeep();
+        }
+        prevAlertCount.current = newAlerts.length;
+        setAlerts(newAlerts);
+      } catch (err) {}
+    };
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const dismissAlerts = async () => {
+    try {
+      await axios.delete("http://localhost:8000/alerts");
+      setAlerts([]);
+      prevAlertCount.current = 0;
+    } catch (err) {}
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -216,6 +259,19 @@ const WebcamStream = () => {
           }}>
             {zoneCount} in zone
           </div>
+          {alerts.length > 0 && (
+            <div
+              onClick={dismissAlerts}
+              style={{
+                padding: "4px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600,
+                background: "rgba(239,68,68,0.15)",
+                border: "0.5px solid rgba(239,68,68,0.3)",
+                color: "#f87171",
+                cursor: "pointer",
+              }}>
+              🚨 {alerts.length} alert{alerts.length !== 1 ? "s" : ""} ✕
+            </div>
+          )}
         </div>
       </div>
 
@@ -233,6 +289,53 @@ const WebcamStream = () => {
           <span style={{ fontSize: 12, color: "#a78bfa", fontStyle: "italic" }}>
             {narration}
           </span>
+        </div>
+      )}
+
+      {/* Alert bar */}
+      {alerts.length > 0 && (
+        <div style={{
+          padding: "8px 32px",
+          background: "rgba(239,68,68,0.08)",
+          borderBottom: "0.5px solid rgba(239,68,68,0.2)",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          overflowX: "auto",
+        }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>🚨</span>
+          <div style={{ display: "flex", gap: 8, flex: 1 }}>
+            {alerts.map((alert, i) => (
+              <div key={i} style={{
+                padding: "3px 12px",
+                borderRadius: 20,
+                background: "rgba(239,68,68,0.15)",
+                border: "0.5px solid rgba(239,68,68,0.3)",
+                fontSize: 11,
+                color: "#f87171",
+                whiteSpace: "nowrap",
+                fontWeight: 600,
+              }}>
+                {alert.message}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={dismissAlerts}
+            style={{
+              padding: "3px 12px",
+              borderRadius: 20,
+              background: "rgba(239,68,68,0.2)",
+              border: "0.5px solid rgba(239,68,68,0.4)",
+              fontSize: 11,
+              color: "#f87171",
+              cursor: "pointer",
+              fontWeight: 700,
+              flexShrink: 0,
+            }}
+          >
+            Dismiss All ✕
+          </button>
         </div>
       )}
 
