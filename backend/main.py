@@ -6,12 +6,17 @@ import cv2
 import numpy as np
 import json
 import time
+import os
 import face_recognition
+import threading
 from pathlib import Path
 from datetime import datetime
 from ultralytics import YOLO
 from centroid_tracker import CentroidTracker
 from scene_narrator import narrate_scene
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 app = FastAPI(title="Smart Vision API")
 
@@ -25,7 +30,7 @@ app.add_middleware(
 
 Path("data/frames").mkdir(parents=True, exist_ok=True)
 
-# Load known faces once at startup
+# Load known faces
 known_names = []
 known_encodings = []
 known_faces_file = Path("data/known_faces.json")
@@ -53,6 +58,7 @@ face_detector = cv2.CascadeClassifier(
 face_tracker = CentroidTracker(max_disappeared=20)
 object_tracker = CentroidTracker(max_disappeared=20)
 
+# Shared state
 frame_count = 0
 face_name_cache = {}
 metadata_buffer = []
@@ -62,6 +68,15 @@ last_objects = []
 last_narration = "Waiting for scene..."
 unknown_face_timer = {}
 active_alerts = []
+last_haar_faces = []
+
+# Threading lock
+lock = threading.Lock()
+
+# Latest frame for background thread
+latest_frame = None
+latest_small_frame = None
+inference_running = False
 
 RECOGNITION_INTERVAL = 5
 YOLO_INTERVAL = 3
@@ -82,27 +97,19 @@ def identify_face(encoding):
 
 def log_attendance(name, face_crop=None):
     global attendance, attendance_date
-
     today = datetime.now().strftime("%Y-%m-%d")
     if today != attendance_date:
         attendance = {}
         attendance_date = today
-
     now = datetime.now().strftime("%H:%M:%S")
-
     if name not in attendance:
         thumbnail = None
         if face_crop is not None:
             _, buffer = cv2.imencode(".jpg", face_crop, [cv2.IMWRITE_JPEG_QUALITY, 80])
             thumbnail = base64.b64encode(buffer).decode("utf-8")
-        attendance[name] = {
-            "first_seen": now,
-            "last_seen": now,
-            "thumbnail": thumbnail
-        }
+        attendance[name] = {"first_seen": now, "last_seen": now, "thumbnail": thumbnail}
     else:
         attendance[name]["last_seen"] = now
-
     path = f"data/attendance_{today}.json"
     with open(path, "w") as f:
         json.dump(attendance, f, indent=2)
@@ -128,11 +135,9 @@ def check_unknown_alerts(faces):
     global unknown_face_timer, active_alerts
     current_time = time.time()
     current_ids = set()
-
     for face in faces:
         track_id = face.get("track_id", -1)
         name = face.get("name", "Unknown")
-
         if name == "Unknown" and track_id != -1:
             current_ids.add(track_id)
             if track_id not in unknown_face_timer:
@@ -151,12 +156,101 @@ def check_unknown_alerts(faces):
                         }
                         active_alerts.append(alert)
                         print(f"🚨 ALERT: {alert['message']}")
-
     for tid in list(unknown_face_timer.keys()):
         if tid not in current_ids:
             del unknown_face_timer[tid]
-
     active_alerts = active_alerts[-10:]
+
+def ai_inference_thread():
+    """Background thread for heavy AI inference"""
+    global latest_frame, latest_small_frame, inference_running
+    global last_objects, last_narration, face_name_cache, last_haar_faces
+    global frame_count
+
+    local_frame_count = 0
+
+    while True:
+        with lock:
+            frame = latest_frame
+            small_frame = latest_small_frame
+            haar_faces = list(last_haar_faces)
+
+        if frame is None:
+            time.sleep(0.01)
+            continue
+
+        local_frame_count += 1
+
+        # Face recognition
+        if local_frame_count % RECOGNITION_INTERVAL == 0 and len(haar_faces) > 0:
+            scale = RESIZE_WIDTH / frame.shape[1]
+            rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            face_locations = [
+                (
+                    int(f["y"] * scale),
+                    int((f["x"] + f["width"]) * scale),
+                    int((f["y"] + f["height"]) * scale),
+                    int(f["x"] * scale),
+                )
+                for f in haar_faces
+            ]
+            face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
+            new_cache = {}
+            for i, encoding in enumerate(face_encodings):
+                name = identify_face(encoding)
+                new_cache[i] = {**haar_faces[i], "name": name}
+                if name not in ["Unknown", "Detecting..."]:
+                    f = haar_faces[i]
+                    y1 = max(0, f["y"])
+                    y2 = min(frame.shape[0], f["y"] + f["height"])
+                    x1 = max(0, f["x"])
+                    x2 = min(frame.shape[1], f["x"] + f["width"])
+                    face_crop = frame[y1:y2, x1:x2]
+                    log_attendance(name, face_crop)
+            with lock:
+                face_name_cache = new_cache
+
+        # YOLO
+        if local_frame_count % YOLO_INTERVAL == 0:
+            results = yolo_model(small_frame, verbose=False)
+            new_objects = []
+            scale = RESIZE_WIDTH / frame.shape[1]
+            for r in results:
+                for box in r.boxes:
+                    label = yolo_model.names[int(box.cls)]
+                    if label in YOLO_TARGETS:
+                        x1, y1, x2, y2 = box.xyxy[0].tolist()
+                        conf = float(box.conf[0])
+                        new_objects.append({
+                            "label": label,
+                            "confidence": round(conf, 2),
+                            "x": int(x1 / scale),
+                            "y": int(y1 / scale),
+                            "width": int((x2 - x1) / scale),
+                            "height": int((y2 - y1) / scale),
+                        })
+            with lock:
+                last_objects = new_objects
+
+        # Narration
+        if local_frame_count % NARRATION_INTERVAL == 0:
+            try:
+                with lock:
+                    objs = list(last_objects)
+                    faces_snap = list(last_haar_faces)
+                narration = narrate_scene(objs, faces_snap)
+                with lock:
+                    last_narration = narration
+                print(f"🎙️ {narration}")
+            except Exception as e:
+                print(f"Narration error: {e}")
+
+        time.sleep(0.01)
+
+# Start background inference thread
+inference_thread = threading.Thread(target=ai_inference_thread, daemon=True)
+inference_thread.start()
+print("✅ Background inference thread started!")
 
 @app.get("/status")
 def status():
@@ -187,25 +281,29 @@ def clear_alerts():
 
 @app.post("/frame")
 def receive_frame(data: FrameData):
-    global frame_count, face_name_cache, metadata_buffer, last_objects, last_narration
+    global frame_count, metadata_buffer, last_haar_faces
+    global latest_frame, latest_small_frame
+
     frame_count += 1
 
     img_bytes = base64.b64decode(data.frame)
     img_array = np.frombuffer(img_bytes, dtype=np.uint8)
     frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
-    orig_h, orig_w = frame.shape[:2]
+    orig_w = frame.shape[1]
     scale = RESIZE_WIDTH / orig_w
-    small_h = int(orig_h * scale)
+    small_h = int(frame.shape[0] * scale)
     small_frame = cv2.resize(frame, (RESIZE_WIDTH, small_h))
 
-    # Haar Cascade face detection
+    # Update latest frame for background thread
+    with lock:
+        latest_frame = frame
+        latest_small_frame = small_frame
+
+    # Haar cascade (fast — runs in main thread)
     gray_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
     detections = face_detector.detectMultiScale(
-        gray_small,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(20, 20)
+        gray_small, scaleFactor=1.1, minNeighbors=5, minSize=(20, 20)
     )
 
     haar_faces = []
@@ -216,8 +314,9 @@ def receive_frame(data: FrameData):
             "name": "Detecting..."
         })
 
-    # Carry names from cache
-    name_map = match_faces_to_cache(haar_faces, face_name_cache)
+    # Apply cached names
+    with lock:
+        name_map = match_faces_to_cache(haar_faces, face_name_cache)
     for i, face in enumerate(haar_faces):
         face["name"] = name_map.get(i, "Detecting...")
 
@@ -228,76 +327,26 @@ def receive_frame(data: FrameData):
     for i, face in enumerate(haar_faces):
         face["track_id"] = int(tracked_ids[i]) if i < len(tracked_ids) else -1
 
-    # Face recognition every N frames
-    if frame_count % RECOGNITION_INTERVAL == 0 and len(haar_faces) > 0:
-        rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-        face_locations = [
-            (
-                int(f["y"] * scale),
-                int((f["x"] + f["width"]) * scale),
-                int((f["y"] + f["height"]) * scale),
-                int(f["x"] * scale),
-            )
-            for f in haar_faces
-        ]
-        face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
-        face_name_cache = {}
-        for i, encoding in enumerate(face_encodings):
-            name = identify_face(encoding)
-            haar_faces[i]["name"] = name
-            face_name_cache[i] = {**haar_faces[i], "name": name}
-            if name != "Unknown" and name != "Detecting...":
-                f = haar_faces[i]
-                y1 = max(0, f["y"])
-                y2 = min(frame.shape[0], f["y"] + f["height"])
-                x1 = max(0, f["x"])
-                x2 = min(frame.shape[1], f["x"] + f["width"])
-                face_crop = frame[y1:y2, x1:x2]
-                log_attendance(name, face_crop)
-
-    # Check for unknown face alerts
-    check_unknown_alerts(haar_faces)
-
-    # YOLO object detection every 3 frames
-    if frame_count % YOLO_INTERVAL == 0:
-        results = yolo_model(small_frame, verbose=False)
-        last_objects = []
-        for r in results:
-            for box in r.boxes:
-                label = yolo_model.names[int(box.cls)]
-                if label in YOLO_TARGETS:
-                    x1, y1, x2, y2 = box.xyxy[0].tolist()
-                    conf = float(box.conf[0])
-                    last_objects.append({
-                        "label": label,
-                        "confidence": round(conf, 2),
-                        "x": int(x1 / scale),
-                        "y": int(y1 / scale),
-                        "width": int((x2 - x1) / scale),
-                        "height": int((y2 - y1) / scale),
-                    })
+    with lock:
+        last_haar_faces = haar_faces
 
     # Update object tracker
-    object_rects = [(o["x"], o["y"], o["width"], o["height"]) for o in last_objects]
+    with lock:
+        objects_snap = list(last_objects)
+    object_rects = [(o["x"], o["y"], o["width"], o["height"]) for o in objects_snap]
     tracked_objects = object_tracker.update(object_rects)
     tracked_obj_ids = list(tracked_objects.keys())
-    for i, obj in enumerate(last_objects):
+    for i, obj in enumerate(objects_snap):
         obj["track_id"] = int(tracked_obj_ids[i]) if i < len(tracked_obj_ids) else -1
 
-    # Scene narration every 30 frames
-    if frame_count % NARRATION_INTERVAL == 0:
-        try:
-            last_narration = narrate_scene(last_objects, haar_faces)
-            print(f"🎙️ {last_narration}")
-        except Exception as e:
-            print(f"Narration error: {e}")
+    check_unknown_alerts(haar_faces)
 
     # Buffer metadata
     metadata_buffer.append({
         "timestamp": time.time(),
         "frame": frame_count,
         "faces": len(haar_faces),
-        "objects": len(last_objects)
+        "objects": len(objects_snap)
     })
     if frame_count % IO_FLUSH_INTERVAL == 0:
         with open("data/frames/metadata.json", "a") as f:
@@ -305,10 +354,14 @@ def receive_frame(data: FrameData):
                 f.write(json.dumps(entry) + "\n")
         metadata_buffer.clear()
 
+    with lock:
+        narration = last_narration
+        alerts = list(active_alerts)
+
     return {
         "status": "ok",
         "faces": haar_faces,
-        "objects": last_objects,
-        "narration": last_narration,
-        "alerts": active_alerts
+        "objects": objects_snap,
+        "narration": narration,
+        "alerts": alerts
     }
