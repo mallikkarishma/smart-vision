@@ -61,6 +61,7 @@ Everything runs locally — no cloud, no external cameras needed.
 ---
 
 ## 📁 Project Structure
+
 ```
 smart-vision/
 ├── backend/
@@ -87,6 +88,7 @@ smart-vision/
 │   └── package.json
 ├── docker-compose.yml
 └── README.md
+
 ```
 ---
 
@@ -190,6 +192,7 @@ GROQ_API_KEY=gsk_your_key_here
 ---
 
 ## 🏗️ Architecture
+
 ```
 Webcam (Browser)
 │
@@ -213,6 +216,7 @@ JSON Response → React UI
 ├── Attendance sidebar (with thumbnails)
 ├── Narration bar
 └── Alert bar
+
 ```
 
 ---
